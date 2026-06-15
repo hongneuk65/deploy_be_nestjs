@@ -100,11 +100,10 @@ export default function Profile() {
             </p>
 
             <span
-              className={`inline-flex mt-3 px-3 py-1 rounded-full text-xs font-medium ${
-                user?.role === 'ADMIN'
+              className={`inline-flex mt-3 px-3 py-1 rounded-full text-xs font-medium ${user?.role === 'ADMIN'
                   ? 'bg-purple-50 text-purple-700'
                   : 'bg-blue-50 text-blue-700'
-              }`}
+                }`}
             >
               {user?.role === 'ADMIN'
                 ? 'Quản trị viên'
@@ -154,9 +153,10 @@ export default function Profile() {
                 </p>
 
                 <p className="text-gray-700">
-                  {user?.createdAt
-                    ? new Date(user.createdAt).toLocaleDateString('vi-VN')
-                    : '—'}
+
+                  {(user as any)?.createdAt
+                    ? new Date((user as any).createdAt).toLocaleDateString('vi-VN')
+                    : null}
                 </p>
               </div>
 

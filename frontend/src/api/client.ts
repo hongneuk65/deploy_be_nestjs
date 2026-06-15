@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 const api = axios.create({
-  baseURL: 'http://localhost:8080',
+  baseURL: import.meta.env.VITE_API_URL,
   withCredentials: true,
 });
 
@@ -15,14 +15,22 @@ api.interceptors.response.use(
   res => res,
   async error => {
     const original = error.config;
+
     if (error.response?.status === 401 && !original._retry) {
       original._retry = true;
+
       const refreshToken = localStorage.getItem('refreshToken');
+
       if (refreshToken) {
         try {
-          const res = await axios.post('http://localhost:8080/auth/refresh', { refreshToken });
+          const res = await axios.post(
+            `${import.meta.env.VITE_API_URL}/auth/refresh`,
+            { refreshToken }
+          );
+
           localStorage.setItem('accessToken', res.data.accessToken);
           original.headers.Authorization = `Bearer ${res.data.accessToken}`;
+
           return api(original);
         } catch {
           localStorage.clear();
@@ -30,6 +38,7 @@ api.interceptors.response.use(
         }
       }
     }
+
     return Promise.reject(error);
   }
 );

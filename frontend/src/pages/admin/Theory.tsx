@@ -5,7 +5,7 @@ import ReactMarkdown from 'react-markdown'; // Cần cài đặt: npm install re
 export default function AdminTheory() {
     const [partNumber, setPartNumber] = useState<number>(1);
     const [contentMd, setContentMd] = useState<string>('');
-    const [loading, setLoading] = useState(false);
+    const [, setLoading] = useState(false);
     const [saving, setSaving] = useState(false);
 
     const fetchTheory = async (part: number) => {

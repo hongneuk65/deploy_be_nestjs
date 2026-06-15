@@ -4,8 +4,7 @@ import apiClient from '../api/client';
 export function useAiAnalysis() {
   const [data, setData] = useState<any>(null);
   const [status, setStatus] = useState<'idle' | 'processing' | 'done' | 'error' | 'none'>('idle');
-  const intervalRef = useRef<ReturnType<typeof setInterval>>();
-
+  const intervalRef = useRef<number | undefined>(undefined);
   // 1. Hàm này CHỈ CHẠY 1 LẦN DUY NHẤT khi mới mở trang để load data cũ
   useEffect(() => {
     apiClient.get('/analysis/global/status')
@@ -25,7 +24,7 @@ export function useAiAnalysis() {
   const triggerAnalysis = async () => {
     if (status === 'processing') return;
     setStatus('processing');
-    
+
     try {
       // Đợi lệnh gọi AI bắt đầu thành công
       await apiClient.post('/analysis/global/trigger');
@@ -37,7 +36,7 @@ export function useAiAnalysis() {
       intervalRef.current = setInterval(async () => {
         try {
           const res = await apiClient.get('/analysis/global/status');
-          
+
           if (res.data.status === 'done') {
             setData(res.data.data);
             setStatus('done');

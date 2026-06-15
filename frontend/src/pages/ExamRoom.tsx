@@ -105,10 +105,6 @@ export default function ExamRoom() {
         : [];
     const isImageGroup = groupedByImage.length > 0;
 
-    // Lấy nhóm câu cùng audio (Part 3-4)
-    const groupedByAudio = current?.isGrouped && current?.audioUrl
-        ? questions.filter(x => x.audioUrl === current.audioUrl && x.isGrouped)
-        : [];
 
     // Helper render đáp án cho 1 câu
     const renderOptions = (q: SubQuestion) => {
@@ -176,7 +172,7 @@ export default function ExamRoom() {
                                 <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">
                                     {groupedByImage.length} câu hỏi
                                 </p>
-                                {groupedByImage.map((q, i) => (
+                                {groupedByImage.map((q,) => (
                                     <div key={q.id} className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
                                         <p className="text-xs font-bold text-blue-500 mb-2">Câu {q.subOrder}</p>
                                         <p className="font-semibold text-gray-800 text-sm">{q.questionText}</p>
