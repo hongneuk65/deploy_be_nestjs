@@ -1,0 +1,322 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── ENUMS ────────────────────────────────────────────────────────────────────
+
+enum Role {
+  STUDENT
+  ADMIN
+}
+
+enum PartType {
+  listening
+  reading
+}
+
+enum AttemptStatus {
+  IN_PROGRESS
+  COMPLETED
+  ABANDONED
+}
+
+enum VocabStatus {
+  KNOWN
+  UNKNOWN
+}
+
+enum WordType {
+  noun
+  verb
+  adj
+  adv
+  phrase
+  other
+}
+
+// ─── MODULE 1: AUTH ────────────────────────────────────────────────────────────
+
+model User {
+  id           String   @id @default(uuid()) @db.Uuid
+  email        String   @unique @db.VarChar(255)
+  passwordHash String?  @map("password_hash") @db.VarChar(255)
+  name         String   @db.VarChar(100)
+  avatarUrl    String?  @map("avatar_url") @db.Text
+  bio          String?  @db.Text
+  role         Role     @default(STUDENT)
+  isActive     Boolean  @default(true) @map("is_active")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  refreshTokens RefreshToken[]
+  attempts      ExamAttempt[]
+  vocabProgress UserVocabProgress[]
+  userVocabs    UserVocab[]
+  aiChats       AiChat[]
+  postAnalyses  PostExamAnalysis[]
+  vocabSets     VocabSet[]
+
+  @@map("users")
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  token     String   @unique @db.Text
+  expiresAt DateTime @map("expires_at") @db.Timestamptz
+  revoked   Boolean  @default(false)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("refresh_tokens")
+}
+
+// ─── MODULE 2: ĐỀ THI ─────────────────────────────────────────────────────────
+
+model Exam {
+  id          String   @id @default(uuid()) @db.Uuid
+  title       String   @db.VarChar(200)
+  description String?  @db.Text
+  isActive    Boolean  @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  parts    Part[]
+  attempts ExamAttempt[]
+
+  @@map("exams")
+}
+
+// 1 Part = 1 section trong JSON (id: 121=Part1, 120=Part2, ...)
+model Part {
+  id          String   @id @default(uuid()) @db.Uuid
+  examId      String   @map("exam_id") @db.Uuid
+  sourceId    Int      @unique @map("source_id") // id từ JSON
+  partNumber  Int      @map("part_number") // 1–7
+  partType    PartType @map("part_type")
+  description String?  @db.Text // HTML hướng dẫn Part
+  audioUrl    String?  @map("audio_url") @db.Text
+
+  exam      Exam       @relation(fields: [examId], references: [id], onDelete: Cascade)
+  questions Question[]
+
+  @@unique([examId, partNumber])
+  @@map("parts")
+}
+
+// 1 Question = 1 phần tử trong questions[] của JSON
+// isGrouped=true  → Part 3/4 (1 audio + nhiều sub) hoặc Part 6/7 (1 passage + nhiều sub)
+// isGrouped=false → Part 1/2/5 (câu độc lập, 1 sub)
+model Question {
+  id            String   @id @default(uuid()) @db.Uuid
+  sourceId      Int      @unique @map("source_id") // question.id từ JSON
+  partId        String   @map("part_id") @db.Uuid
+  isGrouped     Boolean  @default(false) @map("is_grouped")
+  questionOrder Int      @map("question_order")
+  imageUrl      String?  @map("image_url") @db.Text
+  audioUrl      String?  @map("audio_url") @db.Text
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  part         Part          @relation(fields: [partId], references: [id], onDelete: Cascade)
+  subQuestions SubQuestion[]
+
+  @@index([partId])
+  @@map("questions")
+}
+
+// 1 SubQuestion = 1 phần tử trong subQuestions[] của JSON
+// = 1 câu hỏi thực tế người dùng trả lời (1 lựa chọn A/B/C/D)
+model SubQuestion {
+  id            String  @id @default(uuid()) @db.Uuid
+  sourceId      Int     @unique @map("source_id") // subQuestion.number từ JSON (1, 7, 32...)
+  questionId    String  @map("question_id") @db.Uuid
+  subOrder      Int     @map("sub_order") // = sourceId (số thứ tự câu trong đề)
+  questionText  String  @map("question_text") @db.Text
+  optionA       String  @map("option_a") @db.Text
+  optionB       String  @map("option_b") @db.Text
+  optionC       String  @map("option_c") @db.Text
+  optionD       String? @map("option_d") @db.Text // NULL cho Part 2 (chỉ A/B/C)
+  correctAnswer String  @map("correct_answer") @db.Char(1)
+  explanation   String? @db.Text // text thuần, 2 ngôn ngữ
+
+  question    Question     @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  userAnswers UserAnswer[]
+  aiChats     AiChat[]
+
+  @@index([questionId])
+  @@map("sub_questions")
+}
+
+// ─── MODULE 3: THI THỬ ────────────────────────────────────────────────────────
+
+model ExamAttempt {
+  id             String        @id @default(uuid()) @db.Uuid
+  userId         String        @map("user_id") @db.Uuid
+  examId         String        @map("exam_id") @db.Uuid
+  selectedParts  Int[]         @map("selected_parts") // [1,2,3] hoặc [1..7]
+  status         AttemptStatus @default(IN_PROGRESS)
+  startedAt      DateTime      @default(now()) @map("started_at") @db.Timestamptz
+  submittedAt    DateTime?     @map("submitted_at") @db.Timestamptz
+  timeLimitSec   Int?          @map("time_limit_sec")
+  timeSpentSec   Int?          @map("time_spent_sec")
+  listeningScore Int           @default(0) @map("listening_score")
+  readingScore   Int           @default(0) @map("reading_score")
+  totalScore     Int           @default(0) @map("total_score")
+  correctCount   Int           @default(0) @map("correct_count")
+  totalCount     Int           @default(0) @map("total_count")
+  analysisId     String?       @map("analysis_id") @db.Uuid
+  createdAt      DateTime      @default(now()) @map("created_at") @db.Timestamptz
+
+  user        User              @relation(fields: [userId], references: [id])
+  exam        Exam              @relation(fields: [examId], references: [id])
+  userAnswers UserAnswer[]
+  analysis    PostExamAnalysis? @relation(fields: [analysisId], references: [id])
+
+  @@index([userId, createdAt(sort: Desc)])
+  @@map("exam_attempts")
+}
+
+model UserAnswer {
+  id            String   @id @default(uuid()) @db.Uuid
+  attemptId     String   @map("attempt_id") @db.Uuid
+  subQuestionId String   @map("sub_question_id") @db.Uuid
+  partNumber    Int      @map("part_number")
+  chosenAnswer  String?  @map("chosen_answer") @db.Char(1)
+  isCorrect     Boolean? @map("is_correct")
+  isFlagged     Boolean  @default(false) @map("is_flagged")
+  answeredAt    DateTime @default(now()) @map("answered_at") @db.Timestamptz
+
+  attempt     ExamAttempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  subQuestion SubQuestion @relation(fields: [subQuestionId], references: [id])
+
+  @@unique([attemptId, subQuestionId])
+  @@index([attemptId])
+  @@map("user_answers")
+}
+
+// ─── MODULE 4: AI CHAT ────────────────────────────────────────────────────────
+
+model AiChat {
+  id            String   @id @default(uuid()) @db.Uuid
+  userId        String   @map("user_id") @db.Uuid
+  subQuestionId String   @map("sub_question_id") @db.Uuid
+  attemptId     String   @map("attempt_id") @db.Uuid
+  messages      Json     @default("[]") // [{role:"user"|"assistant", content:"..."}]
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt     DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  user        User        @relation(fields: [userId], references: [id])
+  subQuestion SubQuestion @relation(fields: [subQuestionId], references: [id])
+
+  @@unique([userId, subQuestionId, attemptId])
+  @@index([userId, attemptId])
+  @@map("ai_chats")
+}
+
+// ─── MODULE 5: AI PHÂN TÍCH ───────────────────────────────────────────────────
+
+model PostExamAnalysis {
+  id           String   @id @default(uuid()) @db.Uuid
+  userId       String   @map("user_id") @db.Uuid
+  status       String   @default("pending") @db.VarChar(20) // pending|done|error
+  analysisJson Json     @default("{}") @map("analysis_json")
+  generatedAt  DateTime @default(now()) @map("generated_at") @db.Timestamptz
+
+  user     User          @relation(fields: [userId], references: [id])
+  attempts ExamAttempt[]
+
+  @@index([userId])
+  @@map("post_exam_analyses")
+}
+
+// ─── MODULE 6: TỪ VỰNG ───────────────────────────────────────────────────────
+
+// Bộ từ hệ thống do Admin tạo (VD: "Business", "Office", "Travel"...)
+model VocabSet {
+  id          String   @id @default(uuid()) @db.Uuid
+  title       String   @db.VarChar(100)
+  description String?  @db.Text
+  icon        String?  @db.VarChar(10) 
+  sortOrder   Int      @default(0) @map("sort_order")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz
+  userId      String?  @db.Uuid 
+  user        User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  vocabs      Vocab[]
+
+  @@map("vocab_sets")
+}
+
+// Từ vựng hệ thống thuộc 1 bộ từ
+model Vocab {
+  id        String    @id @default(uuid()) @db.Uuid
+  setId     String    @map("set_id") @db.Uuid
+  word      String    @db.VarChar(100)
+  ipa       String?   @db.VarChar(100)
+  meaning   String    @db.Text
+  exampleEn String?   @map("example_en") @db.Text
+  exampleVi String?   @map("example_vi") @db.Text
+  wordType  WordType? @map("word_type")
+  audioUrl  String?   @map("audio_url") @db.Text
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz
+
+  set          VocabSet            @relation(fields: [setId], references: [id], onDelete: Cascade)
+  userProgress UserVocabProgress[]
+
+  @@index([setId])
+  @@map("vocabs")
+}
+
+// Tiến độ học từng từ hệ thống của từng user
+model UserVocabProgress {
+  id         String      @id @default(uuid()) @db.Uuid
+  userId     String      @map("user_id") @db.Uuid
+  vocabId    String      @map("vocab_id") @db.Uuid
+  status     VocabStatus @default(UNKNOWN)
+  reviewedAt DateTime    @default(now()) @map("reviewed_at") @db.Timestamptz
+
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  vocab Vocab @relation(fields: [vocabId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, vocabId])
+  @@index([userId, status])
+  @@map("user_vocab_progress")
+}
+
+// Từ vựng user tự thêm — riêng tư, không liên kết bộ từ
+// User thêm trực tiếp 1 từ, không cần tạo folder/bộ trước
+model UserVocab {
+  id        String      @id @default(uuid()) @db.Uuid
+  userId    String      @map("user_id") @db.Uuid
+  word      String      @db.VarChar(100)
+  ipa       String?     @db.VarChar(100)
+  meaning   String      @db.Text
+  exampleEn String?     @map("example_en") @db.Text
+  exampleVi String?     @map("example_vi") @db.Text
+  wordType  WordType?   @map("word_type")
+  note      String?     @db.Text
+  status    VocabStatus @default(UNKNOWN)
+  createdAt DateTime    @default(now()) @map("created_at") @db.Timestamptz
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt(sort: Desc)])
+  @@map("user_vocabs")
+}
+
+// ─── MODULE 7: LÝ THUYẾT ─────────────────────────────────────────────────────
+
+model TheoryLesson {
+  id         String   @id @default(uuid()) @db.Uuid
+  partNumber Int      @unique @map("part_number")
+  title      String   @db.VarChar(200)
+  contentMd  String   @map("content_md") @db.Text
+  updatedAt  DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@map("theory_lessons")
+}
