@@ -11,5 +11,8 @@
     "skipLibCheck": true,
     "strict": false,
     "resolvePackageJsonExports": false
-  }
+  },
+  "include": [
+    "src/**/*.ts"
+  ]
 }
