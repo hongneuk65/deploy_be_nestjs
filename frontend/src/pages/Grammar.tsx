@@ -51,11 +51,11 @@ export function GrammarDetail() {
         apiClient.get(`/theory/${partNumber}`).then(r => setTheory(r.data));
     }, [partNumber]);
 
-    const startPractice = async () => {
-        setPracticing(true);
-        const res = await apiClient.get(`/theory/${partNumber}/practice`);
-        navigate(`/exam/${res.data.attemptId}?mode=practice`);
-    };
+    // const startPractice = async () => {
+    //     setPracticing(true);
+    //     const res = await apiClient.get(`/theory/${partNumber}/practice`);
+    //     navigate(`/exam/${res.data.attemptId}?mode=practice`);
+    // };
 
     if (!theory) return <div className="p-8 text-center">Đang tải...</div>;
 
@@ -69,13 +69,13 @@ export function GrammarDetail() {
                 <ReactMarkdown>{theory.contentMd}</ReactMarkdown>
             </article>
 
-            <button
-                onClick={startPractice}
-                disabled={practicing}
+            <Link to="/exam"
+                // onClick={startPractice}
+                // disabled={practicing}
                 className="w-full bg-blue-600 text-white py-3 rounded-xl font-medium disabled:opacity-50"
             >
                 {practicing ? 'Đang chuẩn bị...' : 'Luyện tập ngay'}
-            </button>
+            </Link>
         </PageContainer>
     );
 }
