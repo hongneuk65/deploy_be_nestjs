@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useParams, Link } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
 import apiClient from '../api/client';
 import PageContainer from '../components/PageContainer';
@@ -43,9 +43,9 @@ export function GrammarList() {
 // Trang nội dung lý thuyết 1 Part
 export function GrammarDetail() {
     const { partNumber } = useParams();
-    const navigate = useNavigate();
+    // const navigate = useNavigate();
     const [theory, setTheory] = useState<any>(null);
-    const [practicing, setPracticing] = useState(false);
+    const [practicing, ] = useState(false);
 
     useEffect(() => {
         apiClient.get(`/theory/${partNumber}`).then(r => setTheory(r.data));
